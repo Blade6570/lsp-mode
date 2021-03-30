@@ -6791,12 +6791,13 @@ returns the command to execute."
   (list :connect (lambda (filter sentinel name environment-fn)
                    (let* ((final-command (lsp-resolve-final-function
                                           local-command))
+
+                          (process-name (generate-new-buffer-name name))
                           (stderr-buf (format "*%s::stderr*" process-name))
                           ;; (stderr-buf (or (when generate-error-file-fn
                           ;;                   (funcall generate-error-file-fn name))
                           ;;                 (format "/tmp/%s-%s-stderr" name
                           ;;                         (cl-incf lsp--stderr-index))))
-                          (process-name (generate-new-buffer-name name))
                           (process-environment
                            (lsp--compute-process-environment environment-fn))
                           (proc (make-process
