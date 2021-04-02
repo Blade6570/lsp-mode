@@ -6793,27 +6793,48 @@ returns the command to execute."
                                           local-command))
 
                           (process-name (generate-new-buffer-name name))
-                          (stderr-buf (format "*%s::stderr*" process-name))
-                          ;; (stderr-buf (or (when generate-error-file-fn
-                          ;;                   (funcall generate-error-file-fn name))
-                          ;;                 (format "/tmp/%s-%s-stderr" name
-                          ;;                         (cl-incf lsp--stderr-index))))
+;; <<<<<<< HEAD
+;;                           (stderr-buf (format "*%s::stderr*" process-name))
+;;                           ;; (stderr-buf (or (when generate-error-file-fn
+;;                           ;;                   (funcall generate-error-file-fn name))
+;;                           ;;                 (format "/tmp/%s-%s-stderr" name
+;;                           ;;                         (cl-incf lsp--stderr-index))))
+;;                           (process-environment
+;;                            (lsp--compute-process-environment environment-fn))
+;;                           (proc (make-process
+;;                                  :name process-name
+;;                                  :buffer (format "*%s*" process-name)
+;;                                  :command final-command
+;;                                  :connection-type 'pipe
+;;                                  :coding 'no-conversion
+;;                                  :noquery t
+;;                                  :filter filter
+;;                                  :sentinel sentinel
+;;                                  :stderr stderr-buf
+;;                                  :file-handler t)))
+;;                      (cons proc proc)))
+;;         :test? (lambda () (-> local-command lsp-resolve-final-function
+;;                               lsp-server-present?))))
+;; =======
+                          (wrapped-command
+                           (format "stty raw ; %s 2>%s"
+                                   (mapconcat #'shell-quote-argument final-command " ")
+                                   (shell-quote-argument
+                                    (or (when generate-error-file-fn
+                                          (funcall generate-error-file-fn name))
+                                        (format "/tmp/%s-%s-stderr" name
+                                                (cl-incf lsp--stderr-index))))))
                           (process-environment
-                           (lsp--compute-process-environment environment-fn))
-                          (proc (make-process
-                                 :name process-name
-                                 :buffer (format "*%s*" process-name)
-                                 :command final-command
-                                 :connection-type 'pipe
-                                 :coding 'no-conversion
-                                 :noquery t
-                                 :filter filter
-                                 :sentinel sentinel
-                                 :stderr stderr-buf
-                                 :file-handler t)))
-                     (cons proc proc)))
-        :test? (lambda () (-> local-command lsp-resolve-final-function
-                              lsp-server-present?))))
+                           (lsp--compute-process-environment environment-fn)))
+                     (let ((proc (start-file-process-shell-command
+                                  process-name (format "*%s*" process-name) wrapped-command)))
+                       (set-process-sentinel proc sentinel)
+                       (set-process-filter proc filter)
+                       (set-process-query-on-exit-flag proc nil)
+                       (set-process-coding-system proc 'binary 'binary)
+                       (cons proc proc))))
+        :test? (lambda () (-> local-command lsp-resolve-final-function lsp-server-present?))))
+
 
 (defun lsp--auto-configure ()
   "Autoconfigure `company', `flycheck', `lsp-ui', etc if they are installed."
