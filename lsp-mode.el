@@ -6810,7 +6810,7 @@ returns the command to execute."
                                  :noquery t
                                  :filter filter
                                  :sentinel sentinel
-                                 :stderr stderr-buf
+                                 :stderr err-buf
                                  :file-handler t)))
                      (cons proc proc)))
         :test? (lambda () (-> local-command lsp-resolve-final-function
