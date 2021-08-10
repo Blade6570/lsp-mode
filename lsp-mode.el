@@ -7156,35 +7156,44 @@ should return the command to start the LS server."
                 (cons tcp-client-connection cmd-proc)))
    :test? (lambda () (executable-find (cl-first (funcall command-fn 0))))))
 
-(defun lsp-tramp-connection (local-command &optional generate-error-file-fn)
+(defun lsp-tramp-connection (local-command)
   "Create LSP stdio connection named name.
 LOCAL-COMMAND is either list of strings, string or function which
 returns the command to execute."
+  ;; 2.5.0-pre (as built from native-comp branch before M Albinus released tramp-2.5)
+  ;; worked fine
+  (defvar tramp-version)
+  (defvar tramp-connection-properties)
+  (when (version< tramp-version "2.5.0-pre")
+    (lsp-warn
+     "Your tramp version - %s - might fail to work with remote LSP. Update to version 2.5 or greater (available on elpa)"
+     tramp-version))
+  ;; Force a direct asynchronous process.
+  (add-to-list 'tramp-connection-properties
+               (list (regexp-quote (file-remote-p default-directory))
+                     "direct-async-process" t))
   (list :connect (lambda (filter sentinel name environment-fn)
-                   (let* ((final-command (lsp-resolve-final-function local-command))
-                          ;; wrap with stty to disable converting \r to \n
+                   (let* ((final-command (lsp-resolve-final-function
+                                          local-command))
                           (process-name (generate-new-buffer-name name))
-                          (wrapped-command (s-join
-                                            " "
-                                            (append '("stty" "raw" ";")
-                                                    final-command
-                                                    (list
-                                                     (concat "2>"
-                                                             (or (when generate-error-file-fn
-                                                                   (funcall generate-error-file-fn name))
-                                                                 (format "/tmp/%s-%s-stderr" name
-                                                                         (cl-incf lsp--stderr-index))))))))
+                          (stderr-buf (format "*%s::stderr*" process-name))
+                          (err-buf (generate-new-buffer stderr-buf))
                           (process-environment
-                           (lsp--compute-process-environment environment-fn)))
-                     (let ((proc (start-file-process-shell-command process-name
-                                                                   (format "*%s*" process-name)
-                                                                   wrapped-command)))
-                       (set-process-sentinel proc sentinel)
-                       (set-process-filter proc filter)
-                       (set-process-query-on-exit-flag proc nil)
-                       (set-process-coding-system proc 'binary 'binary)
-                       (cons proc proc))))
-        :test? (lambda () (-> local-command lsp-resolve-final-function lsp-server-present?))))
+                           (lsp--compute-process-environment environment-fn))
+                          (proc (make-process
+                                 :name process-name
+                                 :buffer (format "*%s*" process-name)
+                                 :command final-command
+                                 :connection-type 'pipe
+                                 :coding 'no-conversion
+                                 :noquery t
+                                 :filter filter
+                                 :sentinel sentinel
+                                 :stderr err-buf
+                                 :file-handler t)))
+                     (cons proc proc)))
+        :test? (lambda () (-> local-command lsp-resolve-final-function
+                              lsp-server-present?))))
 
 (defun lsp--auto-configure ()
   "Autoconfigure `company', `flycheck', `lsp-ui', etc if they are installed."
